@@ -65,3 +65,7 @@ async def save_changes(payload: SaveData):
         return FileResponse(path=output_path, filename=f"mod_{payload.filename}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+        
+@app.get("/")
+async def root():
+    return FileResponse("index.html")

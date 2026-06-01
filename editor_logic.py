@@ -2,7 +2,7 @@ import subprocess
 import json
 import os
 
-EDITOR_EXE = "editor.exe"
+EDITOR_EXE = "./editor_linux"
 TEMP_JSON = "temp_editor_data.json"
 
 def check_editor():
