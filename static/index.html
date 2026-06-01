@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Dying Light Editor Web</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #1a1a1a; color: #e5e7eb; }
+        .modal-bg { background-color: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    </style>
+</head>
+<body>
+    <div id="app" class="min-h-screen flex flex-col font-sans">
+        
+        <header class="bg-gradient-to-r from-yellow-700 to-yellow-600 text-gray-900 p-4 shadow-lg flex justify-between items-center z-10 relative">
+            <div class="flex items-center gap-4">
+                <h1 class="text-2xl font-black uppercase tracking-widest drop-shadow-sm">Dying Light Save Editor</h1>
+                <button @click="showAbout = true" class="bg-gray-900 text-yellow-500 text-xs px-3 py-1 rounded-full font-bold hover:bg-gray-800 transition border border-yellow-700">About</button>
+            </div>
+            <div class="flex gap-3">
+                <input type="file" id="fileUpload" class="hidden" @change="uploadSave" accept=".sav">
+                <button onclick="document.getElementById('fileUpload').click()" class="bg-gray-900 text-white px-5 py-2 rounded font-bold hover:bg-black transition shadow text-sm border border-gray-700">Open Save (.sav)</button>
+                <button v-if="saveData" @click="downloadSave" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-500 transition shadow-lg text-sm border border-green-700">Compile & Replace</button>
+            </div>
+        </header>
+
+        <main class="flex-1 flex overflow-hidden" v-if="saveData">
+            <aside class="w-64 bg-gray-900 p-5 shadow-2xl flex flex-col border-r border-gray-800 z-0">
+                <nav class="flex flex-col gap-2">
+                    <button v-for="tab in tabs" :key="tab.id" @click="switchTab(tab.id)"
+                            :class="['p-3 text-left rounded-lg font-bold transition duration-200', activeTab === tab.id ? 'bg-yellow-600 text-gray-900 shadow-md' : 'text-gray-400 hover:bg-gray-800 hover:text-white']">
+                        {{ tab.name }}
+                    </button>
+                </nav>
+                
+                <div class="mt-auto pt-6 flex flex-col gap-3">
+                    <button @click="openAddGlobalItemModal" class="bg-emerald-600 p-3 rounded-lg text-sm hover:bg-emerald-500 text-white font-bold transition shadow-lg flex justify-center items-center gap-2">
+                        Add New Item
+                    </button>
+                    <button @click="injectHealthGlitch" class="bg-purple-700 p-3 rounded-lg text-sm hover:bg-purple-600 text-white font-bold transition shadow-lg">Inject Health Glitch</button>
+                </div>
+            </aside>
+
+            <section class="flex-1 p-8 overflow-y-auto bg-[#121212]">
+                
+                <div v-if="activeTab === 'general'" class="max-w-4xl mx-auto">
+                    <h2 class="text-2xl font-black mb-6 border-b border-gray-700 pb-3 text-gray-100">General Data & Buffs</h2>
+                    
+                    <div class="mb-8 bg-gray-800/50 p-6 rounded-xl border border-gray-700 shadow-sm">
+                        <label class="block text-sm font-bold mb-3 text-gray-400 uppercase tracking-wider">Inventory Cash</label>
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl text-yellow-500 font-bold">$</span>
+                            <input type="number" v-model="saveData.player.inventory.cash" class="bg-gray-900 border border-gray-600 p-3 rounded-lg w-64 text-yellow-500 font-bold text-lg focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition">
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-800/50 p-6 rounded-xl border border-gray-700 shadow-sm">
+                        <h3 class="text-sm font-bold mb-4 text-gray-400 uppercase tracking-wider">Timed Buffs</h3>
+                        <div class="flex gap-3 mb-6">
+                            <input type="text" list="buffsDataList" v-model="newBuffName" placeholder="Search or select a buff..." class="bg-gray-900 border border-gray-600 p-3 rounded-lg flex-1 text-white focus:border-yellow-500 outline-none transition">
+                            <button @click="addTimedBuff" class="bg-yellow-600 text-gray-900 px-6 py-3 font-bold rounded-lg hover:bg-yellow-500 transition shadow">Add Buff</button>
+                        </div>
+                        
+                        <div class="bg-gray-900 rounded-lg overflow-hidden border border-gray-700">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-gray-800 border-b border-gray-700">
+                                    <tr>
+                                        <th class="p-4 font-bold text-gray-300">Buff Name</th>
+                                        <th class="p-4 font-bold text-gray-300 w-32">Stacks</th>
+                                        <th class="p-4 font-bold text-gray-300 w-48">Duration (sec)</th>
+                                        <th class="p-4 font-bold text-gray-300 text-right w-24">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(buff, index) in saveData.player.timedBuffs" :key="index" class="border-b border-gray-800 hover:bg-gray-800/50 transition">
+                                        <td class="p-4 text-yellow-500 font-medium">{{ buff.name }}</td>
+                                        <td class="p-4"><input type="number" v-model="buff.stacks" class="bg-gray-800 border border-gray-600 p-2 rounded w-full text-white text-center"></td>
+                                        <td class="p-4"><input type="number" step="0.1" v-model="buff.duration" class="bg-gray-800 border border-gray-600 p-2 rounded w-full text-white text-center"></td>
+                                        <td class="p-4 text-right">
+                                            <button @click="saveData.player.timedBuffs.splice(index, 1)" class="text-red-500 font-bold hover:text-red-400 bg-red-500/10 px-3 py-1 rounded transition">Del</button>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!saveData.player.timedBuffs || saveData.player.timedBuffs.length === 0">
+                                        <td colspan="4" class="p-6 text-center text-gray-500 italic">No active buffs.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="activeTab === 'skills'" class="max-w-5xl mx-auto">
+                    <h2 class="text-2xl font-black mb-6 border-b border-gray-700 pb-3 text-gray-100">Skills Management</h2>
+                    
+                    <div class="bg-gray-800/50 p-6 rounded-xl border border-gray-700 mb-6">
+                        <label class="block text-sm font-bold mb-3 text-gray-400 uppercase tracking-wider">Select and Add Individual Skill</label>
+                        <div class="flex gap-3">
+                            <input type="text" list="skillsDataList" v-model="newSkillName" placeholder="Search or select a skill to unlock..." class="bg-gray-900 border border-gray-600 p-3 rounded-lg flex-1 text-white focus:border-yellow-500 outline-none transition">
+                            <button @click="addIndividualSkill" class="bg-yellow-600 text-gray-900 px-6 py-3 font-bold rounded-lg hover:bg-yellow-500 transition shadow">Unlock Skill</button>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4 mb-6 bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                        <button @click="maxOutAllSkills" class="bg-blue-600 text-white px-6 py-3 font-bold rounded-lg hover:bg-blue-500 transition shadow flex-1">Max Out All Skills (32767)</button>
+                        <button @click="unlockAllSkills" class="bg-emerald-600 text-white px-6 py-3 font-bold rounded-lg hover:bg-emerald-500 transition shadow flex-1">Unlock All Skills (Lvl 1)</button>
+                    </div>
+                    
+                    <div class="bg-gray-900 rounded-xl overflow-hidden border border-gray-700 shadow-lg">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="bg-gray-800 border-b border-gray-700">
+                                <tr>
+                                    <th class="p-4 font-bold text-gray-300">Skill Internal Name</th>
+                                    <th class="p-4 font-bold text-gray-300 w-48 text-center">Stacks (Level)</th>
+                                    <th class="p-4 font-bold text-gray-300 text-right w-32">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(skill, index) in getSkills()" :key="index" class="border-b border-gray-800 hover:bg-gray-800/50 transition">
+                                    <td class="p-4 font-medium text-yellow-500">{{ skill.name }}</td>
+                                    <td class="p-4 text-center">
+                                        <input type="number" v-model="skill.stacks" class="bg-gray-800 border border-gray-600 p-2 rounded w-32 text-white text-center font-bold focus:border-yellow-500 outline-none">
+                                    </td>
+                                    <td class="p-4 text-right">
+                                        <button @click="saveData.player.buffs.splice(saveData.player.buffs.indexOf(skill), 1)" class="text-red-500 hover:text-red-400 font-bold bg-red-500/10 px-3 py-1 rounded transition">Delete</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div v-if="['equipment', 'backpack', 'materials', 'storage'].includes(activeTab)" class="max-w-[1600px] mx-auto">
+                    <div class="flex justify-between items-center mb-6 border-b border-gray-700 pb-3">
+                        <h2 class="text-2xl font-black text-gray-100">{{ currentTabName }}</h2>
+                        <div class="relative">
+                            <input type="text" v-model="searchQuery" placeholder="Search in current tab..." class="bg-gray-900 border border-gray-600 py-2 pl-4 pr-10 rounded-lg w-80 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition shadow-inner">
+                            <button v-if="searchQuery" @click="searchQuery = ''" class="absolute right-3 top-2.5 text-gray-400 hover:text-white">X</button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-3 mb-6 bg-gray-800/80 p-3 rounded-xl shadow-sm border border-gray-700">
+                        <span class="text-gray-400 px-2 text-sm font-bold uppercase tracking-wider border-r border-gray-600 mr-2">Selection</span>
+                        <button @click="massSetMax" class="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-600 hover:text-white transition">Max Qty</button>
+                        <button @click="openMassEditModal" class="bg-purple-600/20 text-purple-400 border border-purple-600/50 px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-600 hover:text-white transition">Bulk Edit</button>
+                        <button @click="massDuplicate" class="bg-gray-600/20 text-gray-300 border border-gray-500/50 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-600 hover:text-white transition">Duplicate</button>
+                        <div class="flex-1"></div>
+                        <button @click="massDelete" class="bg-red-600/20 text-red-400 border border-red-600/50 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-600 hover:text-white transition">Delete Selected</button>
+                    </div>
+
+                    <div class="bg-gray-900 rounded-xl shadow-xl overflow-hidden border border-gray-700">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="bg-gray-800 border-b border-gray-700">
+                                <tr>
+                                    <th class="p-4 w-12 text-center"><input type="checkbox" v-model="selectAllToggle" @change="toggleSelectAll" class="w-4 h-4 rounded border-gray-600 text-yellow-600 focus:ring-yellow-500 bg-gray-900 cursor-pointer"></th>
+                                    <th class="p-4 font-bold text-gray-300">Item Name</th>
+                                    <th class="p-4 font-bold text-gray-300 w-32 text-center">Quantity</th>
+                                    <th class="p-4 font-bold text-gray-300 w-32 text-center">Condition</th>
+                                    <th class="p-4 font-bold text-gray-300 w-32 text-center">Rarity</th>
+                                    <th class="p-4 font-bold text-gray-300 text-right w-24">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(wrapper, index) in filteredItems" :key="index" :class="['border-b border-gray-800 hover:bg-gray-800/80 transition', wrapper.selected ? 'bg-yellow-900/20' : '']">
+                                    <td class="p-4 text-center">
+                                        <input type="checkbox" v-model="wrapper.selected" class="w-4 h-4 rounded border-gray-600 text-yellow-600 focus:ring-yellow-500 bg-gray-900 cursor-pointer">
+                                    </td>
+                                    <td class="p-4 font-bold text-yellow-500">{{ wrapper.item.name }}</td>
+                                    <td class="p-4 text-center font-mono text-gray-300">{{ wrapper.item.quantity }}</td>
+                                    <td class="p-4 text-center font-mono text-gray-300">{{ wrapper.item.condition }}</td>
+                                    <td class="p-4 text-center">
+                                        <span :class="'px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-' + getRarityColor(wrapper.item.attributes?.color)">
+                                            {{ wrapper.item.attributes?.color || 'white' }}
+                                        </span>
+                                    </td>
+                                    <td class="p-4 text-right">
+                                        <button @click="openEditor(wrapper.item)" class="text-blue-400 font-bold hover:text-blue-300 bg-blue-500/10 px-3 py-1 rounded transition">Edit</button>
+                                    </td>
+                                </tr>
+                                <tr v-if="filteredItems.length === 0">
+                                    <td colspan="6" class="p-12 text-center text-gray-500 font-bold">
+                                        No items found.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+
+        <div v-else class="flex-1 flex flex-col items-center justify-center bg-[#121212] relative overflow-hidden">
+            <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] pointer-events-none"></div>
+            <div class="z-10 text-center flex flex-col items-center gap-6 bg-gray-900 p-12 rounded-2xl shadow-2xl border border-gray-800">
+                <h2 class="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 to-yellow-700 uppercase tracking-widest drop-shadow-md">Awaiting Save File</h2>
+                <p class="text-gray-400 max-w-md">Upload a Dying Light .sav file using the top right button to start editing your inventory, skills, and stats.</p>
+                <div class="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-700 text-sm text-gray-500 text-left w-full">
+                    <p class="font-bold text-gray-400 mb-2">Make sure you have:</p>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li>Backed up your save file locally.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showAbout" class="fixed inset-0 modal-bg flex justify-center items-center z-50 transition-opacity">
+            <div class="bg-gray-900 w-[500px] rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-700">
+                <div class="bg-gradient-to-r from-gray-800 to-gray-900 p-5 flex justify-between items-center border-b border-gray-700">
+                    <h3 class="font-black text-xl text-yellow-500 uppercase tracking-wider">About This Project</h3>
+                    <button @click="showAbout = false" class="text-gray-400 hover:text-white text-2xl font-bold transition">X</button>
+                </div>
+                <div class="p-8 flex flex-col gap-6 text-gray-300 leading-relaxed text-center">
+                    <div>
+                        <h4 class="text-2xl font-bold text-white mb-2">Ultimate Save Editor Web</h4>
+                        <p class="text-sm text-gray-400">Version 1.0.0</p>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 text-left">
+                        <p class="mb-4">This web interface and the Python backend bridge were developed to provide a modern, accessible, and fast way to modify Dying Light save files.</p>
+                        <div class="border-t border-gray-700 pt-4 mt-2">
+                            <h5 class="font-bold text-yellow-500 mb-1 text-sm uppercase tracking-wider">Core Technology Acknowledgement</h5>
+                            <p class="text-sm">The underlying CLI tool (editor.exe / editor_linux) used to decrypt, patch, and re-encrypt the .sav files is the proprietary work of <strong>Steffen</strong>.</p>
+                        </div>
+                    </div>
+                    <div class="text-sm">
+                        <a href="https://steffenl.com/projects/dying-light-save-editor" target="_blank" class="text-blue-400 hover:text-blue-300 underline font-bold transition">Visit Steffen's Original Project</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showAddItemModal" class="fixed inset-0 modal-bg flex justify-center items-center z-50">
+            <div class="bg-gray-900 w-[600px] rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-700">
+                <div class="bg-gray-800 p-5 flex justify-between items-center border-b border-gray-700">
+                    <h3 class="font-black text-xl text-emerald-500 uppercase tracking-wider">Add New Item</h3>
+                    <button @click="closeAddItemModal" class="text-gray-400 hover:text-white text-2xl font-bold transition">X</button>
+                </div>
+                <div class="p-6 flex flex-col gap-5">
+                    <div>
+                        <label class="block text-sm mb-2 text-gray-400 font-bold uppercase tracking-wider">Select Item (Searchable)</label>
+                        <input type="text" list="itemsDataList" v-model="newItemData.name" placeholder="Type to search valid items..." class="w-full bg-gray-800 border border-gray-600 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none p-3 rounded-lg text-white font-medium transition">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm mb-2 text-gray-400 font-bold uppercase tracking-wider">Quantity</label>
+                            <input type="number" v-model="newItemData.quantity" class="w-full bg-gray-800 border border-gray-600 p-3 rounded-lg text-white font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-sm mb-2 text-gray-400 font-bold uppercase tracking-wider">Target Location</label>
+                            <select v-model="newItemData.target" class="w-full bg-gray-800 border border-gray-600 p-3 rounded-lg text-white font-bold cursor-pointer">
+                                <option value="inventory">Backpack (Inventory)</option>
+                                <option value="storage">Stash (Storage)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-5 bg-gray-800 border-t border-gray-700 flex justify-end gap-3">
+                    <button @click="closeAddItemModal" class="text-gray-400 hover:text-white font-bold px-4 py-2 transition">Cancel</button>
+                    <button @click="confirmAddItem" class="bg-emerald-600 text-white px-8 py-2 font-bold rounded-lg hover:bg-emerald-500 shadow-lg transition">Create & Add</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="editingItem" class="fixed inset-0 modal-bg flex justify-center items-center z-50">
+            <div class="bg-gray-900 w-[800px] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-700">
+                <div class="bg-gray-800 p-5 flex justify-between items-center border-b border-gray-700">
+                    <h3 class="font-black text-xl text-blue-400 uppercase tracking-wider">Edit Item: <span class="text-white normal-case">{{ editingItem.name }}</span></h3>
+                    <button @click="editingItem = null" class="text-gray-400 hover:text-white text-2xl font-bold transition">X</button>
+                </div>
+                <div class="p-8 overflow-y-auto flex-1 flex flex-col gap-6">
+                    <div class="grid grid-cols-2 gap-5">
+                        <div class="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                            <label class="block text-xs mb-2 text-gray-400 font-bold uppercase tracking-wider">Item Name</label>
+                            <input type="text" list="itemsDataList" v-model="editingItem.name" class="w-full bg-gray-900 border border-gray-600 focus:border-blue-500 outline-none p-2.5 rounded-lg text-white font-medium transition">
+                        </div>
+                        <div class="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                            <label class="block text-xs mb-2 text-gray-400 font-bold uppercase tracking-wider">Main Craftplan</label>
+                            <input type="text" list="craftplansDataList" v-model="editingItem.craftPlan" class="w-full bg-gray-900 border border-gray-600 focus:border-blue-500 outline-none p-2.5 rounded-lg text-white transition">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-5">
+                        <div>
+                            <label class="block text-xs mb-2 text-gray-400 font-bold uppercase tracking-wider">Quantity</label>
+                            <input type="number" v-model="editingItem.quantity" class="w-full bg-gray-800 border border-gray-600 p-2.5 rounded-lg text-white font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-xs mb-2 text-gray-400 font-bold uppercase tracking-wider">Condition</label>
+                            <input type="number" step="0.1" v-model="editingItem.condition" class="w-full bg-gray-800 border border-gray-600 p-2.5 rounded-lg text-white font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-xs mb-2 text-gray-400 font-bold uppercase tracking-wider">Item ID</label>
+                            <input type="number" v-model="editingItem.id" class="w-full bg-gray-800 border border-gray-600 p-2.5 rounded-lg text-gray-500 font-mono" readonly>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-5">
+                        <div class="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                            <label class="block text-xs mb-2 text-gray-400 font-bold uppercase tracking-wider">Rarity (Color)</label>
+                            <select v-model="editingItem.attributes.color" class="w-full bg-gray-900 border border-gray-600 p-2.5 rounded-lg text-white font-bold cursor-pointer transition">
+                                <option v-for="c in ['white', 'green', 'blue', 'violet', 'orange', 'platinum']" :value="c">{{ c }}</option>
+                            </select>
+                        </div>
+                        <div class="bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                            <label class="block text-xs mb-2 text-gray-400 font-bold uppercase tracking-wider">Weapon Mod</label>
+                            <select v-model="editingItem.unknown.unknown008" class="w-full bg-gray-900 border border-gray-600 p-2.5 rounded-lg text-white font-bold cursor-pointer transition">
+                                <option :value="-1">Normal</option>
+                                <option :value="8">OP Weapon</option>
+                                <option :value="2240">One-Shot Firearm</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="bg-gray-800/30 p-5 rounded-xl border border-gray-700 mt-2">
+                        <div class="flex justify-between items-center mb-4">
+                            <label class="block text-sm text-gray-300 font-black uppercase tracking-wider">Upgrade Sockets <span class="bg-gray-700 text-white px-2 py-0.5 rounded-full text-xs ml-2">{{ editingItem.upgradeSockets.length }}</span></label>
+                            <div class="flex gap-2">
+                                <button @click="fillClickers(editingItem)" class="text-xs bg-gray-700 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-600 transition shadow">Fill Clickers</button>
+                                <button @click="addSocket(editingItem)" class="text-xs bg-gray-700 text-white px-3 py-1.5 rounded font-bold hover:bg-gray-600 transition shadow">+ Add Slot</button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 gap-2 mb-4">
+                            <div v-for="(sock, idx) in editingItem.upgradeSockets" :key="idx" class="flex gap-2 relative">
+                                <span class="absolute left-3 top-3 text-xs font-bold text-gray-500">{{ idx + 1 }}</span>
+                                <input type="text" list="craftplansDataList" v-model="editingItem.upgradeSockets[idx]" class="w-full pl-8 bg-gray-900 border border-gray-600 focus:border-blue-500 outline-none p-2.5 rounded-lg text-sm text-white transition">
+                                <button @click="editingItem.upgradeSockets.splice(idx, 1)" class="bg-red-900/50 text-red-400 border border-red-900 hover:bg-red-800 hover:text-white px-4 rounded-lg font-black transition">X</button>
+                            </div>
+                        </div>
+                        <button @click="applyOPCombo(editingItem)" class="text-sm bg-gradient-to-r from-purple-700 to-purple-600 text-white px-4 py-3 font-black rounded-lg hover:from-purple-600 hover:to-purple-500 w-full transition shadow-lg uppercase tracking-wider">Apply OP Combo (Max Stats)</button>
+                    </div>
+                </div>
+                <div class="p-5 bg-gray-800 border-t border-gray-700 flex justify-end">
+                    <button @click="closeEditor" class="bg-blue-600 text-white px-10 py-2.5 font-bold rounded-lg hover:bg-blue-500 shadow-lg transition uppercase tracking-wider">Done</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="massEditModal" class="fixed inset-0 modal-bg flex justify-center items-center z-50">
+            <div class="bg-gray-900 w-[650px] rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-700">
+                <div class="bg-gray-800 p-5 flex justify-between items-center border-b border-gray-700">
+                    <h3 class="font-black text-xl text-purple-400 uppercase tracking-wider">Bulk Edit Properties</h3>
+                    <button @click="massEditModal = false" class="text-gray-400 hover:text-white text-2xl font-bold transition">X</button>
+                </div>
+                <div class="p-8 overflow-y-auto flex flex-col gap-4 text-white">
+                    <p class="text-sm text-gray-400 mb-2 font-medium">Check the boxes to overwrite properties on all selected items.</p>
+                    <div class="flex items-center gap-4 bg-gray-800/50 p-3 rounded-xl border border-gray-700 hover:border-gray-500 transition">
+                        <input type="checkbox" v-model="massData.doQty" class="w-5 h-5 cursor-pointer rounded border-gray-600 text-purple-600 focus:ring-purple-500 bg-gray-900">
+                        <label class="w-24 font-bold text-gray-300 uppercase tracking-wider text-sm">Quantity</label>
+                        <input type="number" v-model="massData.qty" class="bg-gray-900 border border-gray-600 p-2.5 rounded-lg flex-1 font-mono text-white">
+                    </div>
+                    <div class="flex items-center gap-4 bg-gray-800/50 p-3 rounded-xl border border-gray-700 hover:border-gray-500 transition">
+                        <input type="checkbox" v-model="massData.doCond" class="w-5 h-5 cursor-pointer rounded border-gray-600 text-purple-600 focus:ring-purple-500 bg-gray-900">
+                        <label class="w-24 font-bold text-gray-300 uppercase tracking-wider text-sm">Condition</label>
+                        <input type="number" step="0.1" v-model="massData.cond" class="bg-gray-900 border border-gray-600 p-2.5 rounded-lg flex-1 font-mono text-white">
+                    </div>
+                    <div class="flex items-center gap-4 bg-gray-800/50 p-3 rounded-xl border border-gray-700 hover:border-gray-500 transition">
+                        <input type="checkbox" v-model="massData.doCp" class="w-5 h-5 cursor-pointer rounded border-gray-600 text-purple-600 focus:ring-purple-500 bg-gray-900">
+                        <label class="w-24 font-bold text-gray-300 uppercase tracking-wider text-sm">Craftplan</label>
+                        <input type="text" list="craftplansDataList" v-model="massData.cp" class="bg-gray-900 border border-gray-600 focus:border-purple-500 outline-none p-2.5 rounded-lg flex-1 text-white">
+                    </div>
+                    <div class="flex items-center gap-4 bg-gray-800/50 p-3 rounded-xl border border-gray-700 hover:border-gray-500 transition">
+                        <input type="checkbox" v-model="massData.doColor" class="w-5 h-5 cursor-pointer rounded border-gray-600 text-purple-600 focus:ring-purple-500 bg-gray-900">
+                        <label class="w-24 font-bold text-gray-300 uppercase tracking-wider text-sm">Rarity</label>
+                        <select v-model="massData.color" class="bg-gray-900 border border-gray-600 p-2.5 rounded-lg flex-1 font-bold cursor-pointer text-white">
+                            <option v-for="c in ['white', 'green', 'blue', 'violet', 'orange', 'platinum']" :value="c">{{ c }}</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-4 bg-gray-800/50 p-3 rounded-xl border border-gray-700 hover:border-gray-500 transition">
+                        <input type="checkbox" v-model="massData.doMod" class="w-5 h-5 cursor-pointer rounded border-gray-600 text-purple-600 focus:ring-purple-500 bg-gray-900">
+                        <label class="w-24 font-bold text-gray-300 uppercase tracking-wider text-sm">Mod</label>
+                        <select v-model="massData.mod" class="bg-gray-900 border border-gray-600 p-2.5 rounded-lg flex-1 font-bold cursor-pointer text-white">
+                            <option :value="-1">Normal</option>
+                            <option :value="8">OP Weapon</option>
+                            <option :value="2240">One-Shot Firearm</option>
+                        </select>
+                    </div>
+                    <div class="flex items-start gap-4 border border-gray-700 p-5 rounded-xl bg-gray-800/30 mt-2">
+                        <input type="checkbox" v-model="massData.doSockets" class="w-5 h-5 mt-3 cursor-pointer rounded border-gray-600 text-purple-600 focus:ring-purple-500 bg-gray-900">
+                        <div class="flex-1 flex flex-col gap-3">
+                            <label class="font-black text-gray-300 uppercase tracking-wider text-sm">Overwrite Sockets</label>
+                            <div class="grid grid-cols-1 gap-2">
+                                <div v-for="(s, i) in massData.sockets" :key="i" class="flex gap-2">
+                                    <input type="text" list="craftplansDataList" v-model="massData.sockets[i]" class="bg-gray-900 border border-gray-600 focus:border-purple-500 outline-none p-2 rounded-lg text-sm w-full text-white transition">
+                                    <button @click="massData.sockets.splice(i, 1)" class="bg-red-900/50 text-red-400 border border-red-900 hover:bg-red-800 hover:text-white px-3 rounded-lg font-black transition">X</button>
+                                </div>
+                            </div>
+                            <div class="flex gap-2 mt-1">
+                                <button @click="massData.sockets.push('None')" class="text-xs bg-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-600 transition shadow">+ Add Slot</button>
+                                <button @click="massData.sockets = massData.sockets.map(x=>'Craft_Upgrade_DamL2DurL2BalL2_Clicker')" class="text-xs bg-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-600 transition shadow">Fill Clickers</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-5 bg-gray-800 border-t border-gray-700 flex justify-end">
+                    <button @click="applyMassEdit" class="bg-purple-600 text-white px-10 py-2.5 font-bold rounded-lg shadow-lg hover:bg-purple-500 transition uppercase tracking-wider">Apply to Selection</button>
+                </div>
+            </div>
+        </div>
+
+        <datalist id="itemsDataList">
+            <option v-for="item in constants.itemsList" :key="item" :value="item"></option>
+        </datalist>
+        <datalist id="craftplansDataList">
+            <option v-for="cp in constants.craftplans" :value="cp"></option>
+        </datalist>
+        <datalist id="buffsDataList">
+            <option v-for="b in constants.buffs" :value="b"></option>
+        </datalist>
+        <datalist id="skillsDataList">
+            <option v-for="s in constants.skills" :key="s" :value="s"></option>
+        </datalist>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch } = Vue;
+
+        createApp({
+            setup() {
+                const saveData = ref(null);
+                const currentFilename = ref('');
+                const activeTab = ref('general');
+                const searchQuery = ref('');
+                const editingItem = ref(null);
+                const selectAllToggle = ref(false);
+                const currentTabItems = ref([]);
+                const newBuffName = ref('');
+                const newSkillName = ref('');
+                
+                const showAbout = ref(false);
+                const showAddItemModal = ref(false);
+                const newItemData = ref({
+                    name: '',
+                    quantity: 1,
+                    target: 'inventory'
+                });
+
+                const massEditModal = ref(false);
+                const massData = ref({
+                    doQty: false, qty: 2147483647,
+                    doCond: false, cond: 100.0,
+                    doCp: false, cp: "None",
+                    doColor: false, color: "platinum",
+                    doMod: false, mod: 8,
+                    doSockets: false, sockets: ["None", "None", "None", "None"]
+                });
+
+                const constants = ref({ skills: [], buffs: [], craftplans: [], itemsDatabase: {}, itemsList: [] });
+
+                const tabs = [
+                    { id: 'general', name: 'General & Buffs' },
+                    { id: 'skills', name: 'Skills' },
+                    { id: 'equipment', name: 'Active Equipment' },
+                    { id: 'backpack', name: 'Backpack' },
+                    { id: 'materials', name: 'Materials' },
+                    { id: 'storage', name: 'Storage (Stash)' }
+                ];
+
+                const currentTabName = computed(() => tabs.find(t => t.id === activeTab.value)?.name);
+
+                onMounted(async () => {
+                    const res = await fetch('/api/constants');
+                    constants.value = await res.json();
+                });
+
+                watch(() => editingItem.value?.name, (newName) => {
+                    if(editingItem.value && newName && constants.value.itemsDatabase[newName]) {
+                        editingItem.value.id = constants.value.itemsDatabase[newName];
+                    }
+                });
+
+                const switchTab = (tabId) => {
+                    activeTab.value = tabId;
+                    searchQuery.value = '';
+                    selectAllToggle.value = false;
+                    refreshWrappers();
+                };
+
+                const refreshWrappers = () => {
+                    if (!saveData.value) {
+                        currentTabItems.value = [];
+                        return;
+                    }
+                    const inv = saveData.value.player.inventory;
+                    const sto = saveData.value.player.storage;
+                    
+                    let targetArrays = [];
+                    if (activeTab.value === 'equipment') targetArrays = [inv.equipmentSlots, inv.quickSlots];
+                    if (activeTab.value === 'backpack') targetArrays = [inv.items1, inv.items2];
+                    if (activeTab.value === 'materials') targetArrays = [inv.items3];
+                    if (activeTab.value === 'storage') targetArrays = [sto.items1, sto.items2, sto.items3];
+
+                    let wrappers = [];
+                    targetArrays.forEach(arr => {
+                        if(arr) {
+                            arr.forEach(item => wrappers.push({ item: item, parentArray: arr, selected: false }));
+                        }
+                    });
+                    currentTabItems.value = wrappers;
+                };
+
+                const filteredItems = computed(() => {
+                    if (!searchQuery.value) return currentTabItems.value;
+                    const q = searchQuery.value.toLowerCase();
+                    return currentTabItems.value.filter(w => w.item.name.toLowerCase().includes(q));
+                });
+
+                const uploadSave = async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                    const result = await res.json();
+                    saveData.value = result.data;
+                    currentFilename.value = result.filename;
+                    
+                    if(!saveData.value.player.timedBuffs) saveData.value.player.timedBuffs = [];
+                    if(!saveData.value.player.buffs) saveData.value.player.buffs = [];
+                    
+                    refreshWrappers();
+                };
+
+                const downloadSave = async () => {
+                    const res = await fetch('/api/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: currentFilename.value, data: saveData.value })
+                    });
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = currentFilename.value;
+                    a.click();
+                };
+
+                const addTimedBuff = () => {
+                    if(newBuffName.value) {
+                        saveData.value.player.timedBuffs.push({ name: newBuffName.value, stacks: 1, duration: 3600.0 });
+                        newBuffName.value = '';
+                    }
+                };
+
+                const getSkills = () => {
+                    if(!saveData.value) return [];
+                    return saveData.value.player.buffs.filter(b => b.name.includes("_skill") || constants.value.skills.includes(b.name) || constants.value.skills.some(s => s.includes(b.name)));
+                };
+
+                const addIndividualSkill = () => {
+                    if(newSkillName.value && saveData.value) {
+                        const cleanName = newSkillName.value.includes("] ") ? newSkillName.value.split("] ")[1] : newSkillName.value;
+                        const jsonName = cleanName.endsWith("_skill") ? cleanName : cleanName + "_skill";
+                        let existing = saveData.value.player.buffs.find(b => b.name === jsonName);
+                        if (!existing) {
+                            saveData.value.player.buffs.push({ name: jsonName, stacks: 1 });
+                        }
+                        newSkillName.value = '';
+                    }
+                };
+
+                const maxOutAllSkills = () => {
+                    constants.value.skills.forEach(skill => {
+                        const cleanName = skill.includes("] ") ? skill.split("] ")[1] : skill;
+                        const jsonName = cleanName.endsWith("_skill") ? cleanName : cleanName + "_skill";
+                        let existing = saveData.value.player.buffs.find(b => b.name === jsonName);
+                        if (existing) existing.stacks = 32767;
+                        else saveData.value.player.buffs.push({ name: jsonName, stacks: 32767 });
+                    });
+                };
+
+                const unlockAllSkills = () => {
+                    constants.value.skills.forEach(skill => {
+                        const cleanName = skill.includes("] ") ? skill.split("] ")[1] : skill;
+                        const jsonName = cleanName.endsWith("_skill") ? cleanName : cleanName + "_skill";
+                        let existing = saveData.value.player.buffs.find(b => b.name === jsonName);
+                        if (!existing) saveData.value.player.buffs.push({ name: jsonName, stacks: 1 });
+                    });
+                };
+
+                const openAddGlobalItemModal = () => {
+                    newItemData.value = { name: '', quantity: 1, target: 'inventory' };
+                    showAddItemModal.value = true;
+                };
+
+                const closeAddItemModal = () => {
+                    showAddItemModal.value = false;
+                };
+
+                const confirmAddItem = () => {
+                    if(newItemData.value.name && saveData.value) {
+                        const realId = constants.value.itemsDatabase[newItemData.value.name] || 0;
+                        const newItem = {
+                            ammoId: -1,
+                            attributes: { color: "white", unknown1: 0, unknown2: Math.floor(Math.random()*999999) },
+                            condition: 100.0, craftPlan: "None", id: realId, name: newItemData.value.name, quantity: newItemData.value.quantity, repairs: 0,
+                            unknown: { unknown002: 0, unknown004: 0, unknown006: false, unknown007: false, unknown008: -1 },
+                            upgradeSockets: ["None", "None", "None", "None"]
+                        };
+
+                        if (newItemData.value.target === 'storage') {
+                            saveData.value.player.storage.items1.push(newItem);
+                            if(activeTab.value === 'storage') refreshWrappers();
+                        } else {
+                            saveData.value.player.inventory.items1.push(newItem);
+                            if(activeTab.value === 'backpack') refreshWrappers();
+                        }
+                        closeAddItemModal();
+                    }
+                };
+
+                const openEditor = (item) => {
+                    if(!item.attributes) item.attributes = { color: 'white' };
+                    if(!item.upgradeSockets) item.upgradeSockets = [];
+                    if(item.upgradeSockets.length === 0) item.upgradeSockets = ["None", "None", "None", "None"];
+                    if(!item.unknown) item.unknown = { unknown008: -1 };
+                    editingItem.value = item;
+                };
+
+                const closeEditor = () => {
+                    editingItem.value = null;
+                    refreshWrappers();
+                };
+
+                const addSocket = (itemObj) => { itemObj.upgradeSockets.push("None"); };
+
+                const fillClickers = (itemObj) => {
+                    itemObj.upgradeSockets = itemObj.upgradeSockets.map(() => "Craft_Upgrade_DamL2DurL2BalL2_Clicker");
+                };
+
+                const applyOPCombo = (itemObj) => {
+                    itemObj.craftPlan = "Craftplan_GTFO20";
+                    itemObj.attributes.color = "platinum";
+                    itemObj.unknown.unknown008 = 8;
+                    while(itemObj.upgradeSockets.length < 4) itemObj.upgradeSockets.push("None");
+                    itemObj.upgradeSockets[0] = "Craftplan_LightingRod";
+                    itemObj.upgradeSockets[1] = "Craftplan_PoisonBomb";
+                    itemObj.upgradeSockets[2] = "Craftplan_GTFO20";
+                    itemObj.upgradeSockets[3] = "Craft_Upgrade_DamL2DurL2BalL2_Clicker";
+                };
+
+                const toggleSelectAll = () => {
+                    filteredItems.value.forEach(w => w.selected = selectAllToggle.value);
+                };
+
+                const getSelected = () => currentTabItems.value.filter(w => w.selected);
+
+                const massSetMax = () => {
+                    getSelected().forEach(w => w.item.quantity = 2147483647);
+                    selectAllToggle.value = false;
+                    currentTabItems.value.forEach(w => w.selected = false);
+                };
+
+                const massDuplicate = () => {
+                    getSelected().forEach(w => {
+                        const clone = JSON.parse(JSON.stringify(w.item));
+                        if(clone.attributes) clone.attributes.unknown2 = Math.floor(Math.random() * 9999999);
+                        w.parentArray.push(clone);
+                    });
+                    selectAllToggle.value = false;
+                    refreshWrappers(); 
+                };
+
+                const massDelete = () => {
+                    getSelected().forEach(w => {
+                        const idx = w.parentArray.indexOf(w.item);
+                        if (idx > -1) w.parentArray.splice(idx, 1);
+                    });
+                    selectAllToggle.value = false;
+                    refreshWrappers();
+                };
+
+                const openMassEditModal = () => {
+                    if(getSelected().length > 0) massEditModal.value = true;
+                };
+
+                const applyMassEdit = () => {
+                    getSelected().forEach(w => {
+                        const it = w.item;
+                        if(!it.attributes) it.attributes = {};
+                        if(!it.unknown) it.unknown = {};
+                        
+                        if(massData.value.doQty) it.quantity = massData.value.qty;
+                        if(massData.value.doCond) it.condition = massData.value.cond;
+                        if(massData.value.doCp) it.craftPlan = massData.value.cp;
+                        if(massData.value.doColor) it.attributes.color = massData.value.color;
+                        if(massData.value.doMod) it.unknown.unknown008 = massData.value.mod;
+                        if(massData.value.doSockets) it.upgradeSockets = JSON.parse(JSON.stringify(massData.value.sockets));
+                    });
+                    massEditModal.value = false;
+                    selectAllToggle.value = false;
+                    refreshWrappers();
+                };
+
+                const injectHealthGlitch = () => {
+                    if(!saveData.value) return;
+                    const ammoIds = [43, 44, 45, 1151, 1335, 1336, 1337, 1338, 1339, 1340, 1348, 2085, 2086, 2087, 2088, 2089, 2895, 2927, 4456449];
+                    if(!saveData.value.player.inventory.ammo) saveData.value.player.inventory.ammo = { items: [] };
+                    saveData.value.player.inventory.ammo.items = ammoIds.map(id => ({ id: id, value: 0 }));
+                    alert("Health Glitch Injected!");
+                };
+
+                const getRarityColor = (c) => {
+                    const colors = { 'white':'gray-200', 'green':'green-400', 'blue':'blue-400', 'violet':'purple-400', 'orange':'orange-400', 'platinum':'gray-300' };
+                    return colors[c] || 'gray-200';
+                };
+
+                return {
+                    saveData, currentFilename, activeTab, tabs, currentTabName, searchQuery,
+                    constants, filteredItems, editingItem, selectAllToggle,
+                    newBuffName, newSkillName, massEditModal, massData,
+                    showAbout, showAddItemModal, newItemData,
+                    uploadSave, downloadSave, switchTab, addTimedBuff, getSkills, addIndividualSkill, maxOutAllSkills, unlockAllSkills,
+                    openAddGlobalItemModal, closeAddItemModal, confirmAddItem,
+                    openEditor, closeEditor, addSocket, fillClickers, applyOPCombo,
+                    toggleSelectAll, massSetMax, massDuplicate, massDelete, openMassEditModal, applyMassEdit,
+                    injectHealthGlitch, getRarityColor
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
